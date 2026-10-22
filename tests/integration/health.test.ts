@@ -9,8 +9,6 @@ const env = loadEnv({ LOG_LEVEL: 'silent', NODE_ENV: 'test' });
 
 const app = createApp({ env, logger: buildLogger(env) });
 
-
-
 describe('health endpoints', () => {
   it('GET /health/live returns 200', async () => {
     const res = await request(app).get('/health/live');
@@ -27,6 +25,6 @@ describe('health endpoints', () => {
   it('unknown route returns 404 with requestId', async () => {
     const res = await request(app).get('/unknown');
     expect(res.status).toBe(404);
-    expect(res.body.requestId).toBeTruthy()
-  })
+    expect(res.body.requestId).toBeTruthy();
+  });
 });

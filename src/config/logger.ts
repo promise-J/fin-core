@@ -18,11 +18,11 @@ export function buildLogger(env: Env): pino.Logger {
         'refreshToken',
         '*.refreshToken',
       ],
-      remove: true
+      remove: true,
     },
   };
-  if(env.NODE_ENV === 'development') {
-    options.transport = {target: 'pino-pretty', options: {colorize: true}};
+  if (env.NODE_ENV === 'development') {
+    options.transport = { target: 'pino-pretty', options: { colorize: true } };
   }
   return pino(options);
 }

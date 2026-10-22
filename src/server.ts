@@ -15,7 +15,7 @@ server.listen(env.PORT, () => {
 
 let shuttingDown = false;
 async function shutdown(signal: string): Promise<void> {
-    // eslint-disable-next-line no-console
+  // eslint-disable-next-line no-console
   if (shuttingDown) return;
   shuttingDown = true;
   logger.info({ signal }, 'shutdown_initiated');
