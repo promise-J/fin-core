@@ -44,5 +44,3 @@ field a JournalEntry is allowed to change.
 - LedgerPosting rows are immutable.
 - Wallet.balance equals the sum of its ledger account's postings.
 - All amounts are positive integers (the direction determines sign).
-
-git commit -m "feat(database): establish financial domain schema"
