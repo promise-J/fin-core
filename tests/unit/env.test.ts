@@ -21,7 +21,24 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ PORT: '500000' } as NodeJS.ProcessEnv)).toThrow(/PORT/);
   });
 
-  it('rejects invalid log level', () => {
-    expect(() => loadEnv({ LOG_LEVEL: 'promise' }).LOG_LEVEL).toThrow(/LOG_LEVEL/);
-  });
-});
+    it('coerces PORT string to number', ()=>{
+        expect(loadEnv({PORT: "5000"} as NodeJS.ProcessEnv).PORT).toEqual(5000)
+    })
+
+    it('rejects out of range PORT', ()=>{
+        expect(()=> loadEnv({PORT: '500000'} as NodeJS.ProcessEnv)).toThrow(/PORT/)
+    })
+
+    it('rejects invalid log level', ()=>{
+        expect(()=> loadEnv({LOG_LEVEL: 'promise'}).LOG_LEVEL).toThrow(/LOG_LEVEL/)
+    })
+
+    it('requires DATABASE_URL in production', () => {
+        expect(() => loadEnv({ NODE_ENV: 'production' } as NodeJS.ProcessEnv)).toThrow(/DATABASE_URL/);
+      });
+      
+      it('allows missing DATABASE_URL in development', () => {
+        const env = loadEnv({ NODE_ENV: 'development' } as NodeJS.ProcessEnv);
+        expect(env.DATABASE_URL).toBeUndefined();
+      });
+})

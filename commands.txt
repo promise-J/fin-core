@@ -1,0 +1,9 @@
+## start a docker container of postgresql
+docker run -d --name fincore-pg \
+  -e POSTGRES_USER=fincore \
+  -e POSTGRES_PASSWORD=fincore \
+  -e POSTGRES_DB=fincore_dev \
+  -p 5433:5432 \
+  postgres:16
+
+touch $(date +%Y%m%d%H%M%S)

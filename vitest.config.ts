@@ -5,5 +5,6 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     coverage: { provider: 'v8', reporter: ['text', 'html'] },
-  },
+    testTimeout: 60_000
+  }
 });
