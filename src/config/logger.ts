@@ -2,7 +2,7 @@ import pino from 'pino';
 
 import type { Env } from './env.js';
 
-export function buildLogger(env: Env): pino.Logger {
+export function buildLogger(env:  Pick<Env, 'LOG_LEVEL' | 'SERVICE_NAME' | 'NODE_ENV'>): pino.Logger {
   const options: pino.LoggerOptions = {
     name: env.SERVICE_NAME,
     level: env.LOG_LEVEL,
@@ -26,3 +26,5 @@ export function buildLogger(env: Env): pino.Logger {
   }
   return pino(options);
 }
+
+export type AppLogger = ReturnType<typeof buildLogger>;

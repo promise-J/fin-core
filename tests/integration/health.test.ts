@@ -1,13 +1,13 @@
 import request from 'supertest';
 import { expect, describe, it } from 'vitest';
 
-import { createApp } from '../../src/app.js';
+import { buildApp } from '../../src/app.js';
 import { loadEnv } from '../../src/config/env.js';
 import { buildLogger } from '../../src/config/logger.js';
 
 const env = loadEnv({ LOG_LEVEL: 'silent', NODE_ENV: 'test' });
 
-const app = createApp({ env, logger: buildLogger(env) });
+const app = buildApp({ env, logger: buildLogger(env) });
 
 describe('health endpoints', () => {
   it('GET /health/live returns 200', async () => {
