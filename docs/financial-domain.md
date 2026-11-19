@@ -1,27 +1,48 @@
-# Financial Domain — Invariants, Money, and Accounting
+# Financial Domain
 
-## Money
-- NGN minor unit is kobo. 1 NGN = 100 kobo.
-- Internal representation: bigint.
-- Storage: PostgreSQL BIGINT.
-- API: decimal strings ("20000.00") in, decimal strings out. Never JSON number.
-- Parsing is done by a single module (`src/common/money.ts`) with tests
-  covering: leading zeros, sign rejection, more than 2 fractional digits, out-of-range,
-  and empty input.
+## Chart of accounts
 
-## Double-entry
-- Chart of accounts: customer_wallet, platform_cash, payment_clearing,
-  fee_revenue, refund_clearing, reversal_clearing.
-- Postings are append-only. Corrections are compensating journals.
-- Balancing is enforced by a DEFERRABLE INITIALLY DEFERRED constraint trigger on
-  ledger_postings, checked at COMMIT of the journal's transaction.
+- CUSTOMER_WALLET — liabilities owed to customers (credit-normal).
+- PLATFORM_CASH — asset account holding cash.
+- PAYMENT_CLEARING — interim account during provider settlement.
+- FEE_REVENUE — income from transaction fees.
+- REFUND_CLEARING — interim account during refunds.
+- REVERSAL_CLEARING — interim account during reversals.
+- SUSPENSE — account for unknown / mismatched funds pending reconciliation.
 
-## Invariants
-(INV-1..INV-10 as listed in this first stage response. Each invariant is owned by a test file
-that will be added in the stage that implements it. A CI job fails if a test that
-asserts an invariant is deleted or skipped.)
+## Internal transfer
 
-## Explicit non-guarantees
-- No claim of exactly-once across PostgreSQL ↔ RabbitMQ. Only: at-least-once delivery
-  + consumer idempotency, which together give at-most-once *effects*.
-- No real-money capability. See README.md.
+Debit customer A's wallet (decrease liability, i.e. their balance).
+Credit customer B's wallet (increase liability).
+No platform account is involved: money moves between two customers,
+and total platform liabilities are unchanged.
+
+## Wallet funding (via simulated provider)
+
+Provider reports success. We post:
+
+  Debit  PAYMENT_CLEARING   (asset increases — we now hold the cash)
+  Credit CUSTOMER_WALLET    (liability to customer increases)
+
+## Fee
+
+When a fee applies:
+
+  Debit  CUSTOMER_WALLET
+  Credit FEE_REVENUE
+
+## Reversal
+
+Reversals never edit the original journal. They insert a new
+JournalEntry with `reversesEntryId` set and mirrored postings.
+The original entry's status flips to REVERSED — that's the only
+field a JournalEntry is allowed to change.
+
+## Invariants (enforced at the database level)
+
+- Every JournalEntry has SUM(debits) = SUM(credits), same currency.
+- LedgerPosting rows are immutable.
+- Wallet.balance equals the sum of its ledger account's postings.
+- All amounts are positive integers (the direction determines sign).
+
+git commit -m "feat(database): establish financial domain schema"

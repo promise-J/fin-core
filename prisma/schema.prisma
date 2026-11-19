@@ -1,0 +1,581 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearchPostgres"] // optional; drop if not used
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum UserStatus {
+  PENDING_VERIFICATION
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum KycStatus {
+  NOT_STARTED
+  PENDING
+  APPROVED
+  REJECTED
+  REQUIRES_REVIEW
+}
+
+enum Role {
+  CUSTOMER
+  SUPPORT_OPERATOR
+  KYC_REVIEWER
+  FINANCE_OPERATOR
+  ADMINISTRATOR
+}
+
+enum WalletStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum LedgerAccountType {
+  // Customer liabilities
+  CUSTOMER_WALLET
+  // Platform / internal
+  PLATFORM_CASH
+  PAYMENT_CLEARING
+  FEE_REVENUE
+  REFUND_CLEARING
+  REVERSAL_CLEARING
+  SUSPENSE
+}
+
+enum LedgerAccountStatus {
+  ACTIVE
+  FROZEN
+  CLOSED
+}
+
+enum PostingDirection {
+  DEBIT
+  CREDIT
+}
+
+enum JournalStatus {
+  POSTED
+  REVERSED // set on the *original* entry when a compensating entry is created
+}
+
+enum TransferStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  PROCESSING
+  UNKNOWN // provider outcome uncertain — reconcile
+  SUCCEEDED
+  FAILED
+  REFUND_PENDING
+  PARTIALLY_REFUNDED
+  REFUNDED
+  REVERSED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum IdempotencyStatus {
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+}
+
+enum WebhookProcessingStatus {
+  RECEIVED
+  PROCESSING
+  PROCESSED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  DEAD_LETTERED
+}
+
+enum ReconciliationRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum DiscrepancyCategory {
+  PROVIDER_SUCCESS_MISSING_INTERNAL
+  INTERNAL_MISSING_AT_PROVIDER
+  AMOUNT_MISMATCH
+  CURRENCY_MISMATCH
+  DUPLICATE_PROVIDER_REFERENCE
+  STUCK_IN_PROCESSING
+  UNEXPECTED_REVERSAL
+  DUPLICATE_CREDIT
+  REFUND_MISMATCH
+  INCONSISTENT_FINAL_STATE
+}
+
+enum DiscrepancyStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  IGNORED
+}
+
+enum AuditAction {
+  // Auth / identity
+  USER_REGISTERED
+  USER_LOGIN
+  USER_LOGOUT
+  USER_LOGOUT_ALL
+  PASSWORD_CHANGED
+  REFRESH_REUSE_DETECTED
+  // KYC
+  KYC_SUBMITTED
+  KYC_APPROVED
+  KYC_REJECTED
+  KYC_REQUIRES_REVIEW
+  // Wallets / ledger
+  WALLET_CREATED
+  WALLET_FROZEN
+  WALLET_CLOSED
+  LEDGER_CORRECTION_POSTED
+  // Transfers / payments
+  TRANSFER_INITIATED
+  TRANSFER_COMPLETED
+  TRANSFER_FAILED
+  TRANSFER_REVERSED
+  PAYMENT_INITIATED
+  PAYMENT_SUCCEEDED
+  PAYMENT_FAILED
+  REFUND_REQUESTED
+  REFUND_APPROVED
+  REFUND_COMPLETED
+  // Admin / config
+  LIMITS_UPDATED
+  RECONCILIATION_REVIEWED
+  DISCREPANCY_RESOLVED
+  ADMIN_ACTION
+}
+
+// ============================================================
+// IDENTITY & SESSIONS
+// ============================================================
+
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  // Argon2id hash; never returned by any serializer
+  passwordHash    String
+  fullName        String?
+  phoneNumber     String?
+  status          UserStatus @default(PENDING_VERIFICATION)
+  kycStatus       KycStatus  @default(NOT_STARTED)
+  roles           Role[]     @default([CUSTOMER])
+  emailVerifiedAt DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  sessions    Session[]
+  wallets     Wallet[]
+  transfers   Transfer[]          @relation("TransferInitiator")
+  payments    Payment[]
+  refunds     Refund[]
+  auditLogs   AuditLog[]
+  kycReviews  KycReview[]
+  idempotency IdempotencyRecord[]
+
+  @@index([status])
+  @@index([kycStatus])
+  @@index([createdAt])
+}
+
+model Session {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  // Store SHA-256 (or HMAC) of the refresh token — never the raw token
+  refreshTokenHash String    @unique
+  // Rotation / reuse detection
+  familyId         String // groups a rotation chain
+  replacedById     String? // next session in the chain
+  revokedAt        DateTime?
+  revokeReason     String?
+  expiresAt        DateTime
+  createdAt        DateTime  @default(now())
+  lastUsedAt       DateTime?
+  ipAddress        String?
+  userAgent        String?
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+  @@index([expiresAt])
+}
+
+model KycReview {
+  id                 String    @id @default(cuid())
+  userId             String
+  user               User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  reviewerId         String? // admin/support user id (self-FK not enforced via Prisma; use raw SQL FK)
+  status             KycStatus
+  reason             String?
+  // NOTE: do NOT store real identity documents. Synthetic references only.
+  syntheticReference String?
+  createdAt          DateTime  @default(now())
+  decidedAt          DateTime?
+
+  @@index([userId, createdAt])
+}
+
+// ============================================================
+// WALLETS & LEDGER
+// ============================================================
+
+model Wallet {
+  id        String       @id @default(cuid())
+  ownerId   String
+  owner     User         @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  currency  String       @default("NGN")
+  status    WalletStatus @default(ACTIVE)
+  // Projection of ledger postings; source of truth = ledger postings.
+  // Stored as kobo (BigInt). Updated in the same transaction as postings.
+  balance   BigInt       @default(0)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  ledgerAccount LedgerAccount?
+  transfersOut  Transfer[]     @relation("TransferSource")
+  transfersIn   Transfer[]     @relation("TransferDestination")
+
+  @@unique([ownerId, currency]) // one wallet per currency per owner at launch
+  @@index([ownerId])
+  @@index([status])
+}
+
+model LedgerAccount {
+  id           String              @id @default(cuid())
+  type         LedgerAccountType
+  currency     String              @default("NGN")
+  status       LedgerAccountStatus @default(ACTIVE)
+  // Exactly one of walletId / internalCode is set (enforced by CHECK in migration)
+  walletId     String?             @unique
+  wallet       Wallet?             @relation(fields: [walletId], references: [id], onDelete: Restrict)
+  internalCode String?             @unique // e.g. "PLATFORM_CASH_NGN", "FEE_REVENUE_NGN"
+  createdAt    DateTime            @default(now())
+
+  postings LedgerPosting[]
+
+  @@index([type, currency])
+}
+
+model JournalEntry {
+  id              String        @id @default(cuid())
+  // Business transaction reference (transfer id, payment id, refund id, …)
+  referenceType   String // "TRANSFER" | "PAYMENT" | "REFUND" | "REVERSAL" | "CORRECTION"
+  referenceId     String
+  transactionType String // e.g. "INTERNAL_TRANSFER", "WALLET_FUNDING", "FEE"
+  currency        String        @default("NGN")
+  status          JournalStatus @default(POSTED)
+  // If this is a compensating entry, points at the original
+  reversesEntryId String?       @unique
+  reversesEntry   JournalEntry? @relation("JournalReversal", fields: [reversesEntryId], references: [id], onDelete: Restrict)
+  reversalOf      JournalEntry? @relation("JournalReversal")
+  createdByUserId String?
+  createdAt       DateTime      @default(now())
+
+  postings LedgerPosting[]
+
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+}
+
+model LedgerPosting {
+  id              String           @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry     @relation(fields: [journalEntryId], references: [id], onDelete: Restrict)
+  ledgerAccountId String
+  ledgerAccount   LedgerAccount    @relation(fields: [ledgerAccountId], references: [id], onDelete: Restrict)
+  direction       PostingDirection
+  // Always POSITIVE. Direction determines sign. Enforced by CHECK (> 0).
+  amountMinor     BigInt
+  currency        String
+  createdAt       DateTime         @default(now())
+
+  @@index([journalEntryId])
+  @@index([ledgerAccountId, createdAt])
+  @@index([createdAt])
+}
+
+model Transfer {
+  id                  String         @id @default(cuid())
+  reference           String         @unique @default(cuid())
+  initiatorId         String
+  initiator           User           @relation("TransferInitiator", fields: [initiatorId], references: [id], onDelete: Restrict)
+  sourceWalletId      String
+  sourceWallet        Wallet         @relation("TransferSource", fields: [sourceWalletId], references: [id], onDelete: Restrict)
+  destinationWalletId String
+  destinationWallet   Wallet         @relation("TransferDestination", fields: [destinationWalletId], references: [id], onDelete: Restrict)
+  amountMinor         BigInt
+  feeMinor            BigInt         @default(0)
+  currency            String         @default("NGN")
+  status              TransferStatus @default(PENDING)
+  failureCode         String?
+  failureMessage      String?
+  journalEntryId      String?        @unique
+  idempotencyRecordId String?        @unique
+  correlationId       String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  completedAt         DateTime?
+
+  @@index([initiatorId, createdAt])
+  @@index([sourceWalletId, createdAt])
+  @@index([destinationWalletId, createdAt])
+  @@index([status])
+  @@index([correlationId])
+}
+
+model IdempotencyRecord {
+  id                 String            @id @default(cuid())
+  // Scope: authenticated user + operation. Unique on (scope, key).
+  scope              String // e.g. "transfer:create", "payment:initiate"
+  userId             String?
+  user               User?             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  key                String
+  requestFingerprint String // SHA-256 of canonical body
+  status             IdempotencyStatus @default(IN_PROGRESS)
+  responseStatus     Int?
+  responseBody       Json?
+  resourceType       String?
+  resourceId         String?
+  // TTL cleanup handled by scheduled job (expiresAt < now())
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  expiresAt          DateTime
+
+  @@unique([scope, key])
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+model Payment {
+  id                  String        @id @default(cuid())
+  reference           String        @unique @default(cuid())
+  userId              String
+  user                User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  walletId            String?
+  amountMinor         BigInt
+  feeMinor            BigInt        @default(0)
+  currency            String        @default("NGN")
+  status              PaymentStatus @default(CREATED)
+  provider            String // "simulator"
+  providerReference   String?       @unique
+  providerMetadata    Json? // redacted; no PAN, no CVV
+  idempotencyRecordId String?       @unique
+  correlationId       String
+  journalEntryId      String?       @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  succeededAt         DateTime?
+  failedAt            DateTime?
+  refundedTotalMinor  BigInt        @default(0) // denormalized; must equal sum of SUCCEEDED refunds
+
+  refunds Refund[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([provider, providerReference])
+  @@index([correlationId])
+}
+
+model Refund {
+  id                  String       @id @default(cuid())
+  reference           String       @unique @default(cuid())
+  paymentId           String
+  payment             Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  requestedById       String
+  requestedBy         User         @relation(fields: [requestedById], references: [id], onDelete: Restrict)
+  amountMinor         BigInt
+  currency            String       @default("NGN")
+  status              RefundStatus @default(PENDING)
+  reason              String?
+  providerRefundRef   String?      @unique
+  idempotencyRecordId String?      @unique
+  journalEntryId      String?      @unique
+  approvedById        String?
+  approvedAt          DateTime?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+  completedAt         DateTime?
+
+  @@index([paymentId, status])
+  @@index([requestedById, createdAt])
+}
+
+model WebhookEvent {
+  id                String                  @id @default(cuid())
+  provider          String
+  providerEventId   String
+  eventType         String
+  payload           Json // verified payload (sanitized)
+  headers           Json? // redacted
+  signatureVerified Boolean                 @default(false)
+  status            WebhookProcessingStatus @default(RECEIVED)
+  attempts          Int                     @default(0)
+  lastError         String?
+  receivedAt        DateTime                @default(now())
+  processedAt       DateTime?
+  nextAttemptAt     DateTime?
+
+  @@unique([provider, providerEventId])
+  @@index([status, nextAttemptAt])
+  @@index([receivedAt])
+}
+
+model OutboxEvent {
+  id            String       @id @default(cuid())
+  aggregateType String
+  aggregateId   String
+  eventType     String // "transfer.completed.v1"
+  eventVersion  Int          @default(1)
+  payload       Json
+  correlationId String
+  status        OutboxStatus @default(PENDING)
+  attempts      Int          @default(0)
+  lastError     String?
+  // Claiming / lease for multi-worker safety (SKIP LOCKED pattern)
+  claimedBy     String?
+  claimedAt     DateTime?
+  nextAttemptAt DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  publishedAt   DateTime?
+
+  @@index([status, nextAttemptAt])
+  @@index([aggregateType, aggregateId])
+  @@index([correlationId])
+}
+
+model ProcessedMessage {
+  id          String   @id @default(cuid())
+  consumer    String // worker name
+  messageId   String // eventId from envelope
+  processedAt DateTime @default(now())
+
+  @@unique([consumer, messageId])
+  @@index([processedAt])
+}
+
+model AuditLog {
+  id            String      @id @default(cuid())
+  actorUserId   String?
+  actor         User?       @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  action        AuditAction
+  entityType    String
+  entityId      String?
+  before        Json?
+  after         Json?
+  ipAddress     String?
+  userAgent     String?
+  correlationId String?
+  createdAt     DateTime    @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+}
+
+model ReconciliationRun {
+  id           String                  @id @default(cuid())
+  provider     String
+  windowStart  DateTime
+  windowEnd    DateTime
+  status       ReconciliationRunStatus @default(RUNNING)
+  startedAt    DateTime                @default(now())
+  completedAt  DateTime?
+  errorMessage String?
+
+  discrepancies Discrepancy[]
+
+  @@index([provider, windowStart])
+}
+
+model Discrepancy {
+  id                  String              @id @default(cuid())
+  reference           String              @unique @default(cuid())
+  reconciliationRunId String
+  run                 ReconciliationRun   @relation(fields: [reconciliationRunId], references: [id], onDelete: Restrict)
+  provider            String
+  category            DiscrepancyCategory
+  internalReference   String?
+  providerReference   String?
+  expectedAmountMinor BigInt?
+  actualAmountMinor   BigInt?
+  currency            String?
+  status              DiscrepancyStatus   @default(OPEN)
+  notes               String?
+  resolvedById        String?
+  resolvedAt          DateTime?
+  createdAt           DateTime            @default(now())
+
+  @@index([status, category])
+  @@index([reconciliationRunId])
+  @@index([internalReference])
+  @@index([providerReference])
+}
+
+model TransactionLimit {
+  id            String    @id @default(cuid())
+  // appliesTo: "KYC_APPROVED" | "KYC_PENDING" | "KYC_NOT_STARTED" | user tier, etc.
+  appliesTo     String
+  // "SINGLE_TRANSFER" | "DAILY_TRANSFER" | "SINGLE_FUNDING" | "DAILY_FUNDING" | "SINGLE_REFUND"
+  limitType     String
+  currency      String    @default("NGN")
+  amountMinor   BigInt
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([appliesTo, limitType, currency, effectiveFrom])
+  @@index([appliesTo, limitType])
+}
+
+// Daily usage counter for aggregate limits — locked/incremented atomically.
+model DailyLimitUsage {
+  id        String   @id @default(cuid())
+  userId    String
+  limitType String
+  currency  String   @default("NGN")
+  usageDate DateTime // truncated to UTC day
+  usedMinor BigInt   @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, limitType, currency, usageDate])
+  @@index([userId, usageDate])
+}
