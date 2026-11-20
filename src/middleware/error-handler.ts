@@ -22,22 +22,26 @@ export class HttpError extends Error {
 }
 
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
-  const problem: ProblemDetails =
-    err instanceof HttpError
-      ? {
-          type: err.type,
-          title: err.title,
-          status: err.status,
-          instance: req.originalUrl,
-          requestId: req.requestId,
-        }
-      : {
-          type: 'about:blank',
-          title: 'Internal Server Error',
-          status: 500,
-          instance: req.originalUrl,
-          requestId: req.requestId,
-        };
+  const baseProblem =
+  err instanceof HttpError
+    ? {
+        type: err.type,
+        title: err.title,
+        status: err.status,
+        instance: req.originalUrl,
+      }
+    : {
+        type: 'about:blank',
+        title: 'Internal Server Error',
+        status: 500,
+        instance: req.originalUrl,
+      };
+
+const problem: ProblemDetails = {
+  ...baseProblem,
+  ...(req.requestId !== undefined ? { requestId: req.requestId } : {}),
+};
+
   if (err instanceof HttpError && err.detail !== undefined) {
     problem.detail = err.detail;
   }

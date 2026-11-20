@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 
-import jwt from 'jsonwebtoken';
+
+import * as jwt from 'jsonwebtoken'
+
+const { sign, verify } = jwt
 
 // eslint-disable-next-line import/no-unresolved
 import { ProblemDetailsError } from '../../common/errors.js';
@@ -23,7 +26,6 @@ export function hashRefreshToken(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
 }
 
-/** Access-token payload. Keep it small — it travels on every request. */
 export interface AccessTokenPayload {
   sub: string;         // user id
   sid: string;         // session id — lets logout revoke specific sessions
@@ -40,7 +42,7 @@ export function signAccessToken(
   env: Env,
 ): IssuedAccessToken {
   const expiresInSeconds = env.JWT_ACCESS_TTL_SECONDS;
-  const token = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
+  const token = sign(payload, env.JWT_ACCESS_SECRET, {
     algorithm: 'HS256',
     expiresIn: expiresInSeconds,
     issuer: env.SERVICE_NAME,
@@ -55,7 +57,7 @@ export function verifyAccessToken(
   env: Env,
 ): AccessTokenPayload {
   try {
-    const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, {
+    const decoded = verify(token, env.JWT_ACCESS_SECRET, {
       algorithms: ['HS256'],
       issuer: env.SERVICE_NAME,
       audience: env.SERVICE_NAME,

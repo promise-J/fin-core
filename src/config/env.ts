@@ -13,7 +13,7 @@ const EnvSchema = z.object({
     .default('info'),
   SERVICE_NAME: z.string().min(1).default('fincore-api'),
 
-  DATABASE_URL: z.string().url(),
+  DATABASE_URL: z.string(),
 
   JWT_ACCESS_SECRET: z
     .string()
@@ -21,7 +21,7 @@ const EnvSchema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   REFRESH_TOKEN_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
 
-  REDIS_URL: z.string().url(),
+  REDIS_URL: z.string(),
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),

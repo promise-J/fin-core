@@ -4,10 +4,23 @@ import { expect, describe, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
 import { loadEnv } from '../../src/config/env.js';
 import { buildLogger } from '../../src/config/logger.js';
+import { Db } from '../../src/infrastructure/database/db.js';
 
-const env = loadEnv({ LOG_LEVEL: 'silent', NODE_ENV: 'test' });
 
-const app = buildApp({ env, logger: buildLogger(env) });
+
+const env = loadEnv({
+  ...process.env,
+  NODE_ENV: 'test',
+  DATABASE_URL: 'postgresql://u:p@localhost:5432/db',
+  JWT_ACCESS_SECRET: 'a'.repeat(32),
+  REDIS_URL: 'redis://localhost:6379',
+} as NodeJS.ProcessEnv);
+
+const logger = buildLogger({ LOG_LEVEL: 'silent', SERVICE_NAME: 'test', NODE_ENV: 'test', REDIS_URL: env.REDIS_URL, DATABASE_URL: env.DATABASE_URL, JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET });
+const db = {} as Db;
+
+
+const app = buildApp({ env, logger, db });
 
 describe('health endpoints', () => {
   it('GET /health/live returns 200', async () => {

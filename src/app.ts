@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import cors from 'cors';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response, NextFunction, json } from 'express';
 import helmet from 'helmet';
 import {pinoHttp} from 'pino-http';
 
@@ -9,16 +9,18 @@ import {pinoHttp} from 'pino-http';
 import { toProblemDetails } from './common/errors.js';
 import { Env } from './config/env.js';
 import {AppLogger} from './config/logger.js';
+import { Db } from './infrastructure/database/db.js';
+import { buildAuthRouter } from './modules/auth/routes.js';
 
 export interface AppDeps {
   env: Env;
   logger: AppLogger;
-  /** Provided by later sub-phases. Optional so 2.1 can run alone. */
+  db: Db,
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
 }
 
 export function buildApp(deps: AppDeps) {
-  const { env, logger } = deps;
+  const { env, logger, db } = deps;
   const app = express();
 
   app.disable('x-powered-by');
@@ -29,7 +31,7 @@ export function buildApp(deps: AppDeps) {
       credentials: true,
     }),
   );
-  app.use(express.json({ limit: env.BODY_LIMIT_BYTES }));
+  app.use(json({ limit: env.BODY_LIMIT_BYTES }));
 
   // Request ID + structured HTTP logging.
   app.use(
@@ -50,6 +52,11 @@ export function buildApp(deps: AppDeps) {
     }),
   );
 
+  app.use((req, _res, next) => {
+    req.requestId = (req as {id: string}).id;
+    next();
+  });
+
   // Health endpoints.
   app.get('/health/live', (_req, res) => {
     res.status(200).json({ status: 'ok' });
@@ -57,8 +64,9 @@ export function buildApp(deps: AppDeps) {
 
   app.get('/health/ready', async (_req, res) => {
     if (!deps.isReady) {
-      return res.status(200).json({ status: 'ready' });
+      return res.status(503).json({ status: 'not_ready' });
     }
+
     try {
       const result = await deps.isReady();
       if (!result.ready) {
@@ -73,12 +81,20 @@ export function buildApp(deps: AppDeps) {
     }
   });
 
+
+  app.use('/api/v1/auth', buildAuthRouter({ db, env }));
+
   // 404 for everything else.
-  app.use((_req, res) => {
-    res.status(404).json({ type: 'about:blank', status: 404, title: 'Not Found' });
+  app.use((req, res) => {
+    res.status(404).json({
+      type: 'about:blank',
+      status: 404,
+      title: 'Not Found',
+      instance: req.originalUrl,
+      ...(req.requestId !== undefined ? { requestId: req.requestId } : {}),
+    });
   });
 
-  // Central error handler. Must have 4 params for Express to detect it.
   app.use((err: unknown, req: Request, res: Response, _next: NextFunction) => {
     const problem = toProblemDetails(err);
     if (problem.status >= 500) {
