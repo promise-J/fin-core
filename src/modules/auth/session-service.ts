@@ -147,7 +147,7 @@ export function buildSessionService({ db, env }: SessionServiceDeps) {
         );
       }
 
-      // Happy path: issue the replacement first, then link old -> new.
+
       const next = await issueForUser(
         current.userId,
         current.user.roles,
