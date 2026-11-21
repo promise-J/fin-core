@@ -90,16 +90,24 @@ export function buildTransferService({ db: _ }: TransferServiceDeps) {
      * 4.3 and must be called only after postJournal succeeded.
      */
     async markCompleted(
-      _tx: Prisma.TransactionClient,
-      _transferId: string,
-      _journalEntryId: string,
-    ): Promise<never> {
-      throw new ProblemDetailsError(
-        500,
-        'not_implemented',
-        'markCompleted is wired in 4.3 with the ledger posting.',
-      );
-    },
+        tx: Prisma.TransactionClient,
+        transferId: string,
+        journalEntryId: string,
+      ): Promise<Transfer> {
+        const existing = await tx.transfer.findUnique({ where: { id: transferId } });
+        if (!existing) {
+          throw new ProblemDetailsError(404, 'transfer_not_found', 'Transfer not found.');
+        }
+        assertTransition(existing.status, 'COMPLETED');
+        return tx.transfer.update({
+          where: { id: transferId },
+          data: {
+            status: 'COMPLETED',
+            journalEntryId,
+            completedAt: new Date(),
+          },
+        });
+      },
 
     /**
      * Mark FAILED with a code and message.

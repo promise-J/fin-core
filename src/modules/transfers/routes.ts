@@ -17,6 +17,7 @@ export function buildTransfersRouter({ db, env }: TransfersRouterDeps) {
 
   router.use(auth);
   router.post('/', controller.create);
+  router.post('/:transferId/cancel', controller.cancel);
 
   return router;
 }
