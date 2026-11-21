@@ -9,13 +9,13 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
 import { loadEnv } from '../../../src/config/env';
 import { buildPrisma, Db } from '../../../src/infrastructure/database/db';
-import { buildLedgerAccountsService } from '../../../src/modules/ledger/accounts';
+// import { buildLedgerAccountsService } from '../../../src/modules/ledger/accounts';
 import { computeWalletBalanceFromLedger } from '../../../src/modules/ledger/balance';
 import { postJournal } from '../../../src/modules/ledger/post';
 
 let container: StartedPostgreSqlContainer;
 let db: Db;
-let accounts: ReturnType<typeof buildLedgerAccountsService>;
+// let accounts: ReturnType<typeof buildLedgerAccountsService>;
 
 beforeAll(async () => {
   container = await new PostgreSqlContainer('postgres:16')
@@ -36,7 +36,7 @@ beforeAll(async () => {
     REDIS_URL: 'redis://localhost:6379',
   } as NodeJS.ProcessEnv);
   db = buildPrisma(env);
-  accounts = buildLedgerAccountsService(db);
+//   accounts = buildLedgerAccountsService(db);
 }, 120_000);
 
 afterAll(async () => {

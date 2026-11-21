@@ -14,6 +14,7 @@ import {AppLogger} from './config/logger';
 import { Db } from './infrastructure/database/db';
 import { buildRateLimiter } from './infrastructure/redis/rate-limiter';
 import { AuthRouterDeps, buildAuthRouter } from './modules/auth/routes';
+import { buildWalletsRouter } from './modules/wallet/routes';
 
 export interface AppDeps {
   env: Env;
@@ -102,7 +103,11 @@ export function buildApp(deps: AppDeps) {
   });
   authRouterDeps.limiters = { login: loginLimiter, register: registerLimiter, refresh: refreshLimiter };
 }
+
+// all resource routes
   app.use('/api/v1/auth', buildAuthRouter({ db, env }));
+  app.use('/api/v1/wallets', buildWalletsRouter({ db, env }));
+
 
   // 404 for everything else.
   app.use((req, res) => {

@@ -21,11 +21,4 @@ module.exports = {
     'no-console': ['error', { allow: ['error'] }],
   },
   ignorePatterns: ['dist', 'node_modules', 'coverage'],
-  "@typescript-eslint/no-unused-vars": [
-  "error",
-  {
-    "argsIgnorePattern": "^_",
-    "varsIgnorePattern": "^_"
-  }
-]
 };
