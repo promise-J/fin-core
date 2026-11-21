@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { loadEnv } from '../../src/config/env.js';
+import { loadEnv } from '../../src/config/env';
 
 describe('loadEnv', () => {
   it('applies documented defaults', () => {

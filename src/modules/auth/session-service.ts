@@ -1,7 +1,7 @@
 // eslint-disable-next-line import/no-unresolved
-import { ProblemDetailsError } from '../../common/errors.js';
-import { Env } from '../../config/env.js';
-import { Db } from '../../infrastructure/database/db.js';
+import { ProblemDetailsError } from '../../common/errors';
+import { Env } from '../../config/env';
+import { Db } from '../../infrastructure/database/db';
 
 import {
   AccessTokenPayload,
@@ -9,7 +9,7 @@ import {
   hashRefreshToken,
   IssuedAccessToken,
   signAccessToken,
-} from './tokens.js';
+} from './tokens';
 
 export interface SessionRequestMeta {
   ipAddress?: string;

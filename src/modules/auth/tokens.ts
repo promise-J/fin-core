@@ -6,8 +6,8 @@ import * as jwt from 'jsonwebtoken'
 const { sign, verify } = jwt
 
 // eslint-disable-next-line import/no-unresolved
-import { ProblemDetailsError } from '../../common/errors.js';
-import { Env } from '../../config/env.js';
+import { ProblemDetailsError } from '../../common/errors';
+import { Env } from '../../config/env';
 
 const REFRESH_TOKEN_BYTES = 32;
 

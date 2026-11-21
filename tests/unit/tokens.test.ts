@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 
-import { loadEnv } from '../../src/config/env.js';
+import { loadEnv } from '../../src/config/env';
 import {
   generateRefreshToken,
   hashRefreshToken,
   signAccessToken,
   verifyAccessToken,
-} from '../../src/modules/auth/tokens.js';
+} from '../../src/modules/auth/tokens';
 
 const env = loadEnv({
   NODE_ENV: 'test',

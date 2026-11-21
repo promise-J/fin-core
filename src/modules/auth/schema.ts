@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { ProblemDetailsError } from '../../common/errors.js';
+import { ProblemDetailsError } from '../../common/errors';
 
 
 const Password = z

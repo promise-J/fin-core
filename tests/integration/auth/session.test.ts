@@ -6,10 +6,10 @@ import {
 } from '@testcontainers/postgresql';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
-import { loadEnv } from '../../../src/config/env.js';
-import { buildPrisma, Db } from '../../../src/infrastructure/database/db.js';
-import { buildSessionService } from '../../../src/modules/auth/session-service.js';
-import { hashRefreshToken } from '../../../src/modules/auth/tokens.js';
+import { loadEnv } from '../../../src/config/env';
+import { buildPrisma, Db } from '../../../src/infrastructure/database/db';
+import { buildSessionService } from '../../../src/modules/auth/session-service';
+import { hashRefreshToken } from '../../../src/modules/auth/tokens';
 
 let container: StartedPostgreSqlContainer;
 let db: Db;

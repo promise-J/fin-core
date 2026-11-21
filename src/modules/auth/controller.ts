@@ -1,30 +1,36 @@
 import { Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 
-import { ProblemDetailsError } from '../../common/errors.js';
-import { Env } from '../../config/env.js';
-import { Db } from '../../infrastructure/database/db.js';
-import { PasswordHasher } from '../users/password.js';
-import { UsersService, toPublicUser } from '../users/service.js';
+
+import { ProblemDetailsError } from '../../common/errors';
+import { Env } from '../../config/env';
+import { Db } from '../../infrastructure/database/db';
+import { PasswordHasher } from '../users/password';
+import { UsersService, toPublicUser } from '../users/service';
 
 import {
   clearRefreshCookie,
   readRefreshCookie,
   setRefreshCookie,
-} from './cookies.js'
+} from './cookies'
 import {
   LoginBody,
   RegisterBody,
   parseOrThrow,
-} from './schema.js';
-import { SessionService } from './session-service.js';
+} from './schema';
+import { VerificationService } from './service';
+import { SessionService } from './session-service';
 
 export interface AuthControllerDeps {
   db: Db;
   env: Env;
   users: UsersService;
   sessions: SessionService;
+  verification: VerificationService,
   hasher: PasswordHasher;
 }
+
+const VerifyEmailBody = z.object({ token: z.string().min(1).max(512) });
 
 /** Standard response body for a successful auth handshake. */
 function authResponse(result: Awaited<ReturnType<SessionService['startSession']>>) {
@@ -38,7 +44,7 @@ function authResponse(result: Awaited<ReturnType<SessionService['startSession']>
 }
 
 export function buildAuthController(deps: AuthControllerDeps) {
-  const { db, users, env, sessions, hasher } = deps;
+  const { db, users, env, sessions, hasher, verification } = deps;
 
   return {
     async register(req: Request, res: Response, next: NextFunction) {
@@ -50,7 +56,9 @@ export function buildAuthController(deps: AuthControllerDeps) {
           password: input.password,
           ...(input.fullName !== undefined ? { fullName: input.fullName } : {}),
           ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber } : {}),
-        });
+        },async (tx, u) => {
+          await verification.issue(tx, u.id, u.email);
+        },);
 
         const userAgent = req.headers['user-agent'];
 
@@ -104,6 +112,34 @@ export function buildAuthController(deps: AuthControllerDeps) {
         });
         setRefreshCookie(res, auth.refreshToken, auth.refreshTokenExpiresAt, env);
         return res.status(200).json(authResponse(auth));
+      } catch (err) {
+        next(err);
+        return
+      }
+    },
+
+    async verifyEmail(req: Request, res: Response, next: NextFunction) {
+      try {
+        const input = parseOrThrow(VerifyEmailBody, req.body);
+        await verification.verify(input.token);
+        return res.status(204).send();
+      } catch (err) {
+        next(err);
+        return
+      }
+    },
+
+    async resendVerification(req: Request, res: Response, next: NextFunction) {
+      try {
+        const input = parseOrThrow(LoginBody.pick({ email: true }), req.body);
+        const user = await users.findByEmail(input.email);
+        // Uniform response — do not reveal if the email exists or is already verified.
+        if (user && !user.emailVerifiedAt) {
+          await db.$transaction(async (tx) => {
+            await verification.issue(tx, user.id, user.email);
+          });
+        }
+        return res.status(202).json({ message: 'If the account exists and is unverified, an email will be sent.' });
       } catch (err) {
         next(err);
         return

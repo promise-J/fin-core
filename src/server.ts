@@ -1,8 +1,9 @@
 import 'dotenv/config'
-import { buildApp } from './app.js';
-import { loadEnv } from './config/env.js';
-import { buildLogger } from './config/logger.js';
+import { buildApp } from './app';
+import { loadEnv } from './config/env';
+import { buildLogger } from './config/logger';
 import { buildPrisma } from './infrastructure/database/db';
+import { buildRedis } from './infrastructure/redis/client';
 
 async function main() {
   const env = loadEnv();
@@ -17,7 +18,9 @@ async function main() {
     JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET,
   });
 
-  const app = buildApp({ env, logger, db });
+
+  const redis = buildRedis(env, logger);
+  const app = buildApp({ env, logger, db, redis })
 
   const server = app.listen(env.PORT, () => {
     logger.info({ port: env.PORT }, 'fincore-api listening');

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { argonPasswordHasher } from '../../src/modules/users/password.js';
+import { argonPasswordHasher } from '../../src/modules/users/password';
 
 describe('argonPasswordHasher', () => {
   it('produces a hash that verifies against the original', async () => {

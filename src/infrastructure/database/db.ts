@@ -1,7 +1,7 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 
-import { Env } from '../../config/env.js';
+import { Env } from '../../config/env';
 
 /**
  * Build a Prisma client bound to the given env.

@@ -1,10 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 
-import { ProblemDetailsError } from '../../common/errors.js';
-import { Env } from '../../config/env.js';
-import { Db } from '../../infrastructure/database/db.js';
+import { ProblemDetailsError } from '../../common/errors';
+import { Env } from '../../config/env';
+import { Db } from '../../infrastructure/database/db';
 
-import { verifyAccessToken } from './tokens.js';
+import { verifyAccessToken } from './tokens';
 
 export interface RequireAuthDeps {
   env: Env;

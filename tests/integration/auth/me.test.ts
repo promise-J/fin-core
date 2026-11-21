@@ -7,11 +7,11 @@ import {
 import request from 'supertest';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 
-import { buildApp } from '../../../src/app.js';
-import { loadEnv } from '../../../src/config/env.js';
-import { buildLogger } from '../../../src/config/logger.js';
-import { buildPrisma, Db } from '../../../src/infrastructure/database/db.js';
-import { buildSessionService } from '../../../src/modules/auth/session-service.js';
+import { buildApp } from '../../../src/app';
+import { loadEnv } from '../../../src/config/env';
+import { buildLogger } from '../../../src/config/logger';
+import { buildPrisma, Db } from '../../../src/infrastructure/database/db';
+import { buildSessionService } from '../../../src/modules/auth/session-service';
 
 let container: StartedPostgreSqlContainer;
 let db: Db;

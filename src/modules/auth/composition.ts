@@ -1,13 +1,17 @@
-import { Env } from '../../config/env.js';
-import { Db } from '../../infrastructure/database/db.js';
-import { argonPasswordHasher, PasswordHasher } from '../users/password.js';
-import { buildUsersService, UsersService } from '../users/service.js';
+import { Env } from '../../config/env';
+import { Db } from '../../infrastructure/database/db';
+import { argonPasswordHasher, PasswordHasher } from '../users/password';
+import { buildUsersService, UsersService } from '../users/service';
 
-import { buildSessionService, SessionService } from './session-service.js';
+import { buildDbEmailQueue, EmailQueue } from './email-queue';
+import { buildVerificationService, VerificationService } from './service';
+import { buildSessionService, SessionService } from './session-service';
 
 export interface AuthComposition {
   users: UsersService;
   sessions: SessionService;
+  verification: VerificationService;
+  emailQueue: EmailQueue;
 }
 
 export function buildAuthComposition({
@@ -19,8 +23,12 @@ export function buildAuthComposition({
   env: Env;
   hasher?: PasswordHasher;
 }): AuthComposition {
+  const emailQueue = buildDbEmailQueue(db);
+
   return {
     users: buildUsersService({ db, hasher }),
     sessions: buildSessionService({ db, env }),
+    verification: buildVerificationService({ db, env, emailQueue }),
+    emailQueue,
   };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { koboToNairaString, MoneyError, nairaToKobo } from '../../src/infrastructure/database/money.js';
+import { koboToNairaString, MoneyError, nairaToKobo } from '../../src/infrastructure/database/money';
 
 
 describe('nairaToKobo', () => {

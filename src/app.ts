@@ -4,19 +4,22 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, Response, NextFunction, json } from 'express';
 import helmet from 'helmet';
+import Redis from 'ioredis';
 import {pinoHttp} from 'pino-http';
 
 // eslint-disable-next-line import/no-unresolved
-import { toProblemDetails } from './common/errors.js';
-import { Env } from './config/env.js';
-import {AppLogger} from './config/logger.js';
-import { Db } from './infrastructure/database/db.js';
-import { buildAuthRouter } from './modules/auth/routes.js';
+import { toProblemDetails } from './common/errors';
+import { Env } from './config/env';
+import {AppLogger} from './config/logger';
+import { Db } from './infrastructure/database/db';
+import { buildRateLimiter } from './infrastructure/redis/rate-limiter';
+import { AuthRouterDeps, buildAuthRouter } from './modules/auth/routes';
 
 export interface AppDeps {
   env: Env;
   logger: AppLogger;
   db: Db,
+  redis?: Redis;
   isReady?: () => Promise<{ ready: boolean; reason?: string }>;
 }
 
@@ -85,6 +88,20 @@ export function buildApp(deps: AppDeps) {
   });
 
 
+  const authRouterDeps: AuthRouterDeps = { db, env };
+  
+  if (deps.redis) {
+  const loginLimiter = buildRateLimiter(deps.redis, logger, {
+    points: 10, durationSeconds: 60, keyPrefix: 'rl:login:',
+  });
+  const registerLimiter = buildRateLimiter(deps.redis, logger, {
+    points: 5, durationSeconds: 300, keyPrefix: 'rl:register:',
+  });
+  const refreshLimiter = buildRateLimiter(deps.redis, logger, {
+    points: 30, durationSeconds: 60, keyPrefix: 'rl:refresh:',
+  });
+  authRouterDeps.limiters = { login: loginLimiter, register: registerLimiter, refresh: refreshLimiter };
+}
   app.use('/api/v1/auth', buildAuthRouter({ db, env }));
 
   // 404 for everything else.

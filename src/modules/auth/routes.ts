@@ -1,16 +1,22 @@
 import { Router } from 'express';
 
-import { Env } from '../../config/env.js';
-import { Db } from '../../infrastructure/database/db.js';
-import { argonPasswordHasher } from '../users/password.js';
+import { Env } from '../../config/env';
+import { Db } from '../../infrastructure/database/db';
+import { RateLimiter } from '../../infrastructure/redis/rate-limiter';
+import { argonPasswordHasher } from '../users/password';
 
-import { buildAuthComposition } from './composition.js';
-import { buildAuthController } from './controller.js';
-import { requireAuth } from './middleware.js';
+import { buildAuthComposition } from './composition';
+import { buildAuthController } from './controller';
+import { requireAuth } from './middleware';
 
 export interface AuthRouterDeps {
   db: Db;
   env: Env;
+  limiters?: {
+    login: RateLimiter;
+    register: RateLimiter;
+    refresh: RateLimiter;
+  };
 }
 
 export function buildAuthRouter({ db, env }: AuthRouterDeps) {
@@ -23,6 +29,7 @@ export function buildAuthRouter({ db, env }: AuthRouterDeps) {
     users: composition.users,
     sessions: composition.sessions,
     hasher,
+    verification: composition.verification,
   });
   const auth = requireAuth({ env, db });
 
@@ -32,6 +39,8 @@ export function buildAuthRouter({ db, env }: AuthRouterDeps) {
   router.post('/logout', controller.logout);
   router.post('/logout-all', auth, controller.logoutAll);
   router.get('/me', auth, controller.me);
+  router.post('/verify-email', controller.verifyEmail);
+  router.post('/resend-verification', controller.resendVerification);
 
   return router;
 }

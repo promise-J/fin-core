@@ -7,7 +7,6 @@ import { z } from 'zod';
  */
 const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  COOKIE_DOMAIN: z.string().optional(),
   PORT: z.coerce.number().int().positive().max(65535).default(3000),
   LOG_LEVEL: z
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'])
@@ -26,6 +25,8 @@ const EnvSchema = z.object({
 
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
   BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(1_048_576),
+  MAIL_OUTBOX_PATH: z.string().default('./.mail-outbox'),
+  COOKIE_DOMAIN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

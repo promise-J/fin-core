@@ -210,6 +210,8 @@ model User {
   auditLogs   AuditLog[]
   kycReviews  KycReview[]
   idempotency IdempotencyRecord[]
+  emailVerifications EmailVerificationToken[]
+
 
   @@index([status])
   @@index([kycStatus])
@@ -578,4 +580,44 @@ model DailyLimitUsage {
 
   @@unique([userId, limitType, currency, usageDate])
   @@index([userId, usageDate])
+}
+
+
+model EmailVerificationToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  tokenHash  String    @unique
+  expiresAt  DateTime  @db.Timestamptz(3)
+  consumedAt DateTime? @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, createdAt])
+}
+
+enum EmailOutboxStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  DEAD_LETTERED
+}
+
+model EmailOutbox {
+  id            String            @id @default(cuid())
+  toAddress     String
+  subject       String
+  bodyText      String
+  bodyHtml      String?
+  status        EmailOutboxStatus @default(PENDING)
+  attempts      Int               @default(0)
+  lastError     String?
+  claimedBy     String?
+  claimedAt     DateTime?         @db.Timestamptz(3)
+  nextAttemptAt DateTime          @default(now()) @db.Timestamptz(3)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  sentAt        DateTime?         @db.Timestamptz(3)
+
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
 }

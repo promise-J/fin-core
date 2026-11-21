@@ -1,6 +1,6 @@
 import pino from 'pino';
 
-import type { Env } from './env.js';
+import type { Env } from './env';
 
 export function buildLogger(
   env: Pick<

@@ -1,10 +1,10 @@
 import { Prisma } from '@prisma/client';
 
 // eslint-disable-next-line import/no-unresolved
-import { ProblemDetailsError } from '../../common/errors.js';
-import { Db } from '../../infrastructure/database/db.js';
+import { ProblemDetailsError } from '../../common/errors';
+import { Db } from '../../infrastructure/database/db';
 
-import { PasswordHasher } from './password.js';
+import { PasswordHasher } from './password';
 
 
 
@@ -40,30 +40,43 @@ export function buildUsersService({ db, hasher }: UsersServiceDeps) {
     async findById(id: string) {
       return db.user.findUnique({ where: { id } });
     },
-
-    /**
-     * Create a user. Email is lowercased before storage so that
-     * 'Alice@Example.com' and 'alice@example.com' cannot both exist.
-     * The unique constraint on User.email is the authoritative guard;
-     * this just normalizes at the boundary.
+ /**
+     * Create a user. The caller can pass `afterCreate` to run additional
+     * writes (e.g. issuing a verification token) inside the same DB
+     * transaction — if the extra writes fail, the user is rolled back.
      */
-    async createUser(input: CreateUserInput): Promise<PublicUser> {
+    async createUser(
+      input: CreateUserInput,
+      afterCreate?: (
+        tx: Prisma.TransactionClient,
+        user: { id: string; email: string; roles: string[] },
+      ) => Promise<void>,
+    ): Promise<PublicUser> {
       const email = input.email.toLowerCase();
       const passwordHash = await hasher.hash(input.password);
 
       try {
-        const user = await db.user.create({
-          data: {
-            email,
-            passwordHash,
-            fullName: input.fullName ?? null,
-            phoneNumber: input.phoneNumber ?? null,
-            status: 'ACTIVE',
-            kycStatus: 'NOT_STARTED',
-            roles: ['CUSTOMER'],
-          },
+        return await db.$transaction(async (tx) => {
+          const user = await tx.user.create({
+            data: {
+              email,
+              passwordHash,
+              fullName: input.fullName ?? null,
+              phoneNumber: input.phoneNumber ?? null,
+              status: 'PENDING_VERIFICATION',
+              kycStatus: 'NOT_STARTED',
+              roles: ['CUSTOMER'],
+            },
+          });
+          if (afterCreate) {
+            await afterCreate(tx, {
+              id: user.id,
+              email: user.email,
+              roles: user.roles,
+            });
+          }
+          return toPublicUser(user);
         });
-        return toPublicUser(user);
       } catch (err) {
         if (
           err instanceof Prisma.PrismaClientKnownRequestError &&

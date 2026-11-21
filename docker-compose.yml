@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: fincore-pg
+    environment:
+      POSTGRES_USER: fincore
+      POSTGRES_PASSWORD: fincore
+      POSTGRES_DB: fincore_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
