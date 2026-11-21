@@ -5,8 +5,9 @@ import { koboToNairaString } from '../../infrastructure/database/money';
 
 import { CreateWalletBody, parseOrThrow } from './schemas';
 import { WalletsService } from './service';
+import { StatementService } from './statement';
 
-export function buildWalletsController(wallets: WalletsService) {
+export function buildWalletsController(wallets: WalletsService, statementService: StatementService) {
   return {
     async create(req: Request, res: Response, next: NextFunction) {
       try {
@@ -57,6 +58,29 @@ export function buildWalletsController(wallets: WalletsService) {
         return
     }
     },
+
+    async statement(req: Request, res: Response, next: NextFunction) {
+      try {
+        if (!req.user) throw new ProblemDetailsError(401, 'not_authenticated', 'Authentication required.');
+        const wallet = await wallets.findOwned(req.params['walletId']!, req.user.id);
+        const limit = Math.min(parseInt(String(req.query['limit'] ?? '50'), 10) || 50, 100);
+        const cursor = typeof req.query['cursor'] === 'string' ? req.query['cursor'] : undefined;
+        const page = await statementService.page(wallet.id, { limit, ...(cursor ? { cursor } : {}) });
+        return res.json({
+          walletId: wallet.id,
+          currency: wallet.currency,
+          rows: page.rows.map((r) => ({
+            ...r,
+            amountMinor: r.amountMinor.toString(),
+            postedAt: r.postedAt.toISOString(),
+          })),
+          nextCursor: page.nextCursor,
+        });
+      } catch (err) {
+         next(err); 
+        return
+      }
+    }
   };
 }
 

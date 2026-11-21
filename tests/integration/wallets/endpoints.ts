@@ -97,3 +97,30 @@ describe('wallets endpoints', () => {
     expect(res.status).toBe(401);
   });
 });
+
+it('GET /:id/statement returns journal entries for the wallet', async () => {
+  const { token } = await userAndToken('st@example.com');
+  const created = await request(app).post('/api/v1/wallets').set('Authorization', `Bearer ${token}`).send({});
+  const walletId = created.body.wallet.id;
+
+  // Fund via the ledger primitive directly.
+  const { postJournal } = await import('../../../src/modules/ledger/post');
+  const account = await db.ledgerAccount.findUnique({ where: { walletId } });
+  const cash = await db.ledgerAccount.create({ data: { type: 'PLATFORM_CASH', currency: 'NGN', internalCode: 'ST_CASH' } });
+  await db.$transaction(async (tx) => {
+    await postJournal(tx, {
+      referenceType: 'FUNDING', referenceId: 'stf1', transactionType: 'WALLET_FUNDING', currency: 'NGN',
+      postings: [
+        { ledgerAccountId: cash.id, direction: 'DEBIT', amountMinor: 500n },
+        { ledgerAccountId: account!.id, direction: 'CREDIT', amountMinor: 500n },
+      ],
+      updates: [{ walletId, deltaMinor: 500n }],
+    });
+  });
+
+  const res = await request(app).get(`/api/v1/wallets/${walletId}/statement`).set('Authorization', `Bearer ${token}`);
+  expect(res.status).toBe(200);
+  expect(res.body.rows).toHaveLength(1);
+  expect(res.body.rows[0].direction).toBe('CREDIT');
+  expect(res.body.rows[0].amountMinor).toBe('500');
+});
