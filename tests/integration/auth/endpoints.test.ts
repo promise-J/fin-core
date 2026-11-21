@@ -124,22 +124,22 @@ describe('auth endpoints — full flow', () => {
     expect(res.body.code).toBe('invalid_credentials');
   });
 
-  it('refresh rotates the token and revokes the old one', async () => {
+  it('refresh rotates the cookie and revokes the old one', async () => {
     const reg = await request(app)
       .post('/api/v1/auth/register')
       .send({ email: 'd@example.com', password: PASSWORD });
-    const oldRefresh = reg.body.refreshToken;
-
+    const cookie1 = refreshCookieFrom(reg);
+  
     const res = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: oldRefresh });
+      .set('Cookie', cookie1);
     expect(res.status).toBe(200);
-    expect(res.body.refreshToken).not.toBe(oldRefresh);
-
-    // Old one is now revoked; using it triggers reuse detection (family kill).
+    const cookie2 = refreshCookieFrom(res);
+    expect(cookie2).not.toBe(cookie1);
+  
     const reuse = await request(app)
       .post('/api/v1/auth/refresh')
-      .send({ refreshToken: oldRefresh });
+      .set('Cookie', cookie1); // old cookie
     expect(reuse.status).toBe(401);
     expect(reuse.body.code).toBe('refresh_token_reused');
   });
@@ -196,3 +196,28 @@ describe('auth endpoints — full flow', () => {
     expect(res.body.user.email).toBe('g@example.com');
   });
 });
+
+it('logout clears the cookie and a subsequent refresh fails', async () => {
+  const reg = await request(app)
+    .post('/api/v1/auth/register')
+    .send({ email: 'e@example.com', password: PASSWORD });
+  const cookie = refreshCookieFrom(reg);
+
+  const out = await request(app)
+    .post('/api/v1/auth/logout')
+    .set('Cookie', cookie);
+  expect(out.status).toBe(204);
+
+  const refreshAfter = await request(app)
+    .post('/api/v1/auth/refresh')
+    .set('Cookie', cookie);
+  expect(refreshAfter.status).toBe(401);
+});
+
+function refreshCookieFrom(res: request.Response): string {
+  const setCookie = res.headers['set-cookie'];
+  const cookies = Array.isArray(setCookie) ? setCookie : setCookie ? [setCookie] : [];
+  const cookie = cookies.find((c) => c.startsWith('refresh_token='));
+  if (!cookie) throw new Error('no refresh cookie in response');
+  return cookie.split(';')[0]; // "refresh_token=..."
+}

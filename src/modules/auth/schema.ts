@@ -28,18 +28,9 @@ export const LoginBody = z.object({
   password: z.string().min(1).max(128),
 });
 
-export const RefreshBody = z.object({
-  refreshToken: z.string().min(1).max(512),
-});
-
-export const LogoutBody = z.object({
-  refreshToken: z.string().min(1).max(512),
-});
 
 export type RegisterInput = z.infer<typeof RegisterBody>;
 export type LoginInput = z.infer<typeof LoginBody>;
-export type RefreshInput = z.infer<typeof RefreshBody>;
-export type LogoutInput = z.infer<typeof LogoutBody>;
 
 
 export function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {

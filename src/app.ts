@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express, { Request, Response, NextFunction, json } from 'express';
 import helmet from 'helmet';
@@ -32,6 +33,8 @@ export function buildApp(deps: AppDeps) {
     }),
   );
   app.use(json({ limit: env.BODY_LIMIT_BYTES }));
+  app.use(cookieParser());
+
 
   // Request ID + structured HTTP logging.
   app.use(

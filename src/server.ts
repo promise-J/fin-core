@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { buildApp } from './app.js';
 import { loadEnv } from './config/env.js';
 import { buildLogger } from './config/logger.js';
-import { buildPrisma } from './infrastructure/database/db.js';
+import { buildPrisma } from './infrastructure/database/db';
 
 async function main() {
   const env = loadEnv();

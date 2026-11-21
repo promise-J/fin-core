@@ -7,9 +7,12 @@ import { PasswordHasher } from '../users/password.js';
 import { UsersService, toPublicUser } from '../users/service.js';
 
 import {
+  clearRefreshCookie,
+  readRefreshCookie,
+  setRefreshCookie,
+} from './cookies.js'
+import {
   LoginBody,
-  LogoutBody,
-  RefreshBody,
   RegisterBody,
   parseOrThrow,
 } from './schema.js';
@@ -35,7 +38,7 @@ function authResponse(result: Awaited<ReturnType<SessionService['startSession']>
 }
 
 export function buildAuthController(deps: AuthControllerDeps) {
-  const { db, users, sessions, hasher } = deps;
+  const { db, users, env, sessions, hasher } = deps;
 
   return {
     async register(req: Request, res: Response, next: NextFunction) {
@@ -56,6 +59,8 @@ export function buildAuthController(deps: AuthControllerDeps) {
           ...(userAgent !== undefined ? { userAgent } : {}),
         });
         
+        setRefreshCookie(res, auth.refreshToken, auth.refreshTokenExpiresAt, env);
+
         return res.status(201).json(authResponse(auth));
       } catch (err) {
         next(err);
@@ -97,6 +102,7 @@ export function buildAuthController(deps: AuthControllerDeps) {
           ...(req.ip !== undefined ? { ipAddress: req.ip } : {}),
           ...(userAgent !== undefined ? { userAgent } : {}),
         });
+        setRefreshCookie(res, auth.refreshToken, auth.refreshTokenExpiresAt, env);
         return res.status(200).json(authResponse(auth));
       } catch (err) {
         next(err);
@@ -106,14 +112,21 @@ export function buildAuthController(deps: AuthControllerDeps) {
 
     async refresh(req: Request, res: Response, next: NextFunction) {
       try {
-        const input = parseOrThrow(RefreshBody, req.body);
+        const raw = readRefreshCookie(req.cookies);
+
+        if (!raw) {
+          throw new ProblemDetailsError(
+            401, 'missing_refresh_token', 'Refresh token cookie is required.',
+          );
+        }
 
         const userAgent = req.headers['user-agent']
-        const auth = await sessions.rotate(input.refreshToken, {
+        const auth = await sessions.rotate(raw, {
           ...(req.ip !== undefined ? { ipAddress: req.ip } : {}),
           ...(userAgent !== undefined ? { userAgent } : {}),
         });
     
+        setRefreshCookie(res, auth.refreshToken, auth.refreshTokenExpiresAt, env);
         return res.status(200).json(authResponse(auth));
       } catch (err) {
         next(err);
@@ -123,8 +136,11 @@ export function buildAuthController(deps: AuthControllerDeps) {
 
     async logout(req: Request, res: Response, next: NextFunction) {
       try {
-        const input = parseOrThrow(LogoutBody, req.body);
-        await sessions.revokeByToken(input.refreshToken);
+        const raw = readRefreshCookie(req.cookies);
+        if (raw) {
+          await sessions.revokeByToken(raw);
+        }
+        clearRefreshCookie(res, env);
         return res.status(204).send();
       } catch (err) {
         next(err);
